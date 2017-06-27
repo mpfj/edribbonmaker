@@ -381,7 +381,7 @@
             this.Controls.Add(this.labelPreviewImage);
             this.MinimumSize = new System.Drawing.Size(681, 563);
             this.Name = "FormRibbonMaker";
-            this.Text = "ED Ribbon Maker";
+            this.Text = "ED Ribbon Maker (1v0)";
             this.Load += new System.EventHandler(this.FormRibbonMaker_Load);
             ((System.ComponentModel.ISupportInitialize)(this.numericRibbonWidth)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericRibbonHeight)).EndInit();
