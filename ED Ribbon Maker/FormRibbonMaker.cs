@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
 using System.IO;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml;
 
 namespace ED_Ribbon_Maker
 {
@@ -22,8 +17,10 @@ namespace ED_Ribbon_Maker
 
         bool dragFromSource = false;
 
-        Color colourCount = Color.White;
-        Font fontCount = new Font(FontFamily.GenericSansSerif, 24, FontStyle.Bold);
+        Color colourCount = Color.Black;
+        Font fontCount = new Font("Arial", 42, FontStyle.Bold);
+
+        string dirLoadSave = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
         public FormRibbonMaker()
         {
@@ -160,7 +157,7 @@ namespace ED_Ribbon_Maker
                     ListViewItem item = (ListViewItem)e.Data.GetData(typeof(ListViewItem));
                     ListViewItem newitem = listViewSelected.Items.Add(item.Text);
                     newitem.SubItems.Add("0");
-                    listViewFull.Items.Remove(item);
+                    newitem.SubItems.Add(GetRibbonFilename(item.Text));
 
                     // update main ribbon image
                     UpdateRibbonPanel(true, true, true, true);
@@ -193,7 +190,6 @@ namespace ED_Ribbon_Maker
                 if (e.Data.GetDataPresent(typeof(ListViewItem)))
                 {
                     ListViewItem item = (ListViewItem)e.Data.GetData(typeof(ListViewItem));
-                    listViewFull.Items.Add(item.Text);
                     listViewSelected.Items.Remove(item);
 
                     // update main ribbon image
@@ -272,7 +268,7 @@ namespace ED_Ribbon_Maker
                         // update ribbon image ?
                         if (updatePicture)
                         {
-                            LoadPicture(l, listViewSelected.Items[index].Text);
+                            LoadPicture(l, listViewSelected.Items[index]);
                         }
                         // update count ?
                         if (updateCount)
@@ -294,10 +290,27 @@ namespace ED_Ribbon_Maker
             }
         }
 
+        private string GetRibbonFilename(string name)
+        {
+            return textBoxRibbonSource.Text + "\\" + name + RIBBON_SUFFIX;
+        }
+
+        private void LoadPicture(Label l, ListViewItem item)
+        {
+            if (item.SubItems.Count > 2)
+            {
+                Image i = Image.FromFile(item.SubItems[2].Text);
+                l.Image = i;
+            }
+            else
+            {
+                l.Image = null;
+            }
+        }
+
         private void LoadPicture(Label l, string name)
         {
-            string filename = textBoxRibbonSource.Text + "\\" + name + RIBBON_SUFFIX;
-            Image i = Image.FromFile(filename);
+            Image i = Image.FromFile(GetRibbonFilename(name));
             l.Image = i;
         }
 
@@ -363,7 +376,7 @@ namespace ED_Ribbon_Maker
                 ListViewItem item = listViewSelected.SelectedItems[0];
 
                 // preview selected ribbon
-                LoadPicture(labelPreviewImage, item.Text);
+                LoadPicture(labelPreviewImage, item);
 
                 // populate count spinner
                 numericUpDownCount.Value = int.Parse(item.SubItems[1].Text);
@@ -389,7 +402,8 @@ namespace ED_Ribbon_Maker
 
                 // update ribbon image
                 int index = item.Index;
-                int idxC = panelRibbonsImage.Controls.IndexOfKey("Count" + ((index / MAX_RIBBONS_WIDE) + (index % MAX_RIBBONS_WIDE)).ToString());
+                index = ((index / (int)numericRibbonWidth.Value) * MAX_RIBBONS_WIDE) + (index % (int)numericRibbonWidth.Value);
+                int idxC = panelRibbonsImage.Controls.IndexOfKey("Count" + index.ToString());
                 Label l = (Label)panelRibbonsImage.Controls[idxC];
                 SetCount(l, int.Parse(item.SubItems[1].Text));
             }
@@ -419,9 +433,8 @@ namespace ED_Ribbon_Maker
                     lbl.Text = new string('★', -count);
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                Console.WriteLine(e.ToString());
             }
         }
 
@@ -474,6 +487,194 @@ namespace ED_Ribbon_Maker
             }
             catch (Exception)
             {
+            }
+        }
+
+        private void buttonSaveConfig_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // create new save dialog
+                SaveFileDialog dlg = new SaveFileDialog();
+                // set initial directory
+                dlg.InitialDirectory = dirLoadSave;
+                // show dialog
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        // save xml config
+                        XmlWriterSettings xs = new XmlWriterSettings();
+                        xs.Indent = true;
+                        XmlWriter xw = XmlWriter.Create(dlg.FileName, xs);
+
+                        // write header
+                        xw.WriteStartDocument();
+                        xw.WriteStartElement("edribbonmaker");
+
+                        // write version
+                        xw.WriteElementString("version", "1v0");
+
+                        // save width & height
+                        xw.WriteElementString("width", numericRibbonWidth.Value.ToString());
+                        xw.WriteElementString("height", numericRibbonHeight.Value.ToString());
+
+                        // save list of ribbons
+                        xw.WriteStartElement("ribbons");
+                        foreach (ListViewItem item in listViewSelected.Items)
+                        {
+                            xw.WriteStartElement("ribbon");
+                            xw.WriteElementString("name", item.SubItems[0].Text);
+                            xw.WriteElementString("count", item.SubItems[1].Text);
+                            if (item.SubItems.Count > 2)
+                            {
+                                xw.WriteElementString("path", item.SubItems[2].Text);
+                            }
+                            xw.WriteEndElement();
+                        }
+                        xw.WriteEndElement();
+
+                        // save colour
+                        xw.WriteElementString("colour", colourCount.ToArgb().ToString("X").Substring(2, 6));
+
+                        // save font
+                        xw.WriteStartElement("font");
+                        xw.WriteElementString("family", fontCount.FontFamily.Name.ToString());
+                        xw.WriteElementString("size", fontCount.Size.ToString());
+                        xw.WriteElementString("style", fontCount.Style.GetHashCode().ToString());
+                        xw.WriteEndElement();
+
+                        xw.WriteEndElement();
+                        xw.Flush();
+                        xw.Close();
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                MessageBox.Show("Error saving config file");
+            }
+        }
+
+        private void buttonLoadConfig_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // create new open dialog
+                OpenFileDialog dlg = new OpenFileDialog();
+                // set initial directory
+                dlg.InitialDirectory = dirLoadSave;
+                // show dialog
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        // open xml config
+                        XmlDocument xd = new XmlDocument();
+                        xd.Load(dlg.FileName);
+
+                        // make sure this is one of our config files
+                        XmlNode node = xd.SelectSingleNode("edribbonmaker");
+                        if (node == null)
+                        {
+                            MessageBox.Show("Invalid config file");
+                            return;
+                        }
+
+                        // scan all the children
+                        foreach (XmlNode xn in node.ChildNodes)
+                        {
+                            switch (xn.Name)
+                            {
+                                case "version":
+                                    break;
+                                case "width":
+                                    numericRibbonWidth.Value = int.Parse(xn.InnerText);
+                                    break;
+                                case "height":
+                                    numericRibbonHeight.Value = int.Parse(xn.InnerText);
+                                    break;
+                                case "ribbons":
+                                    // clear existing selected ribbon list
+                                    listViewSelected.Items.Clear();
+
+                                    // add new ribbons
+                                    foreach (XmlNode xn2 in xn.ChildNodes)
+                                    {
+                                        // make sure we have all required info
+                                        XmlNode xname = xn2.SelectSingleNode("name");
+                                        XmlNode xcount = xn2.SelectSingleNode("count");
+                                        XmlNode xpath = xn2.SelectSingleNode("path");
+                                        if ((xname != null) && (xcount != null) && (xpath != null))
+                                        {
+                                            // create ribbon entry
+                                            ListViewItem item = new ListViewItem(xname.InnerText);
+                                            item.SubItems.Add(xcount.InnerText);
+                                            item.SubItems.Add(xpath.InnerText);
+
+                                            // add to ribbon list
+                                            listViewSelected.Items.Add(item);
+                                        }
+                                    }
+                                    break;
+                                case "colour":
+                                    colourCount = ColorTranslator.FromHtml("#" + xn.InnerText);
+                                    break;
+                                case "font":
+                                    // make sure we have all required info
+                                    XmlNode xfamily = xn.SelectSingleNode("family");
+                                    XmlNode xsize = xn.SelectSingleNode("size");
+                                    XmlNode xstyle = xn.SelectSingleNode("style");
+                                    if ((xfamily != null) && (xsize != null) && (xstyle != null))
+                                    {
+                                        // set new font
+                                        fontCount = new Font(new FontFamily(xfamily.InnerText), int.Parse(xsize.InnerText), (FontStyle)int.Parse(xstyle.InnerText));
+                                    }
+                                    break;
+                            }
+                        }
+
+                        // update main ribbon image
+                        UpdateRibbonPanel(true, true, true, true);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                MessageBox.Show("Error loading config file");
+            }
+
+        }
+
+        private void buttonSaveImage_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // create new save dialog
+                SaveFileDialog dlg = new SaveFileDialog();
+                // set initial directory
+                dlg.InitialDirectory = dirLoadSave;
+                // show dialog
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    // save image
+                    int width = (int)numericRibbonWidth.Value * DEFAULT_RIBBON_WIDTH;
+                    int height = (int)numericRibbonHeight.Value * DEFAULT_RIBBON_HEIGHT;
+
+                    Bitmap bm = new Bitmap(width, height);
+                    panelRibbonsImage.DrawToBitmap(bm, new Rectangle(0, 0, width, height));
+                    bm.Save(dlg.FileName, System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            catch (Exception)
+            {
+                MessageBox.Show("Error saving config file");
             }
         }
     }
